@@ -3,6 +3,11 @@ name: Publish
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v1.0.2)"
+        required: true
 
 jobs:
   publish-npm:
@@ -14,22 +19,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22.x"
           registry-url: https://registry.npmjs.org
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Build
-        run: bun run build
+      - name: Download release tarball
+        run: gh release download ${{ steps.tag.outputs.tag }} --pattern "*.tgz"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to npm
-        run: npm publish --access public --provenance
+        run: npm publish *.tgz --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
