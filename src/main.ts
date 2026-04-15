@@ -1,12 +1,10 @@
 #!/usr/bin/env bun
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { Layer, ManagedRuntime } from "effect";
+import { ManagedRuntime } from "effect";
 import { GrafanaClientLive } from "./infra/GrafanaClientLive.ts";
 import { createMcpServer } from "./mcp/server.ts";
 
-const layer = Layer.mergeAll(GrafanaClientLive);
-
-const runtime = ManagedRuntime.make(layer);
+const runtime = ManagedRuntime.make(GrafanaClientLive);
 
 const server = createMcpServer(runtime);
 

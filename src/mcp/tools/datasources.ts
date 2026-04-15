@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import type { GrafanaError, NotFoundError } from "../../domain/errors.ts";
 import { GrafanaClient } from "../../domain/GrafanaClient.ts";
-import { formatError, formatSuccess } from "../utils.ts";
+import { runTool } from "../utils.ts";
 
 export const registerDatasourceTools = (
   server: McpServer,
@@ -15,16 +15,14 @@ export const registerDatasourceTools = (
     "List all configured Grafana datasources. Returns id, uid, name, type, url, and isDefault.",
     {},
     { title: "List Datasources", readOnlyHint: true, openWorldHint: true },
-    async () => {
-      const result = await runtime.runPromiseExit(
+    () =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.listDatasources();
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -34,16 +32,14 @@ export const registerDatasourceTools = (
       uid: z.string().describe("Datasource UID"),
     },
     { title: "Get Datasource", readOnlyHint: true, openWorldHint: true },
-    async ({ uid }) => {
-      const result = await runtime.runPromiseExit(
+    ({ uid }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.getDatasource(uid);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -61,16 +57,14 @@ export const registerDatasourceTools = (
       destructiveHint: false,
       openWorldHint: true,
     },
-    async ({ name, type, url, isDefault }) => {
-      const result = await runtime.runPromiseExit(
+    ({ name, type, url, isDefault }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.createDatasource(name, type, url, isDefault);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -80,15 +74,14 @@ export const registerDatasourceTools = (
       uid: z.string().describe("Datasource UID"),
     },
     { title: "Delete Datasource", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    async ({ uid }) => {
-      const result = await runtime.runPromiseExit(
+    ({ uid }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           yield* client.deleteDatasource(uid);
+          return { ok: true };
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess({ ok: true });
-    },
+      ),
   );
 };

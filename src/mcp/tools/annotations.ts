@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import type { GrafanaError, NotFoundError } from "../../domain/errors.ts";
 import { GrafanaClient } from "../../domain/GrafanaClient.ts";
-import { formatError, formatSuccess } from "../utils.ts";
+import { runTool } from "../utils.ts";
 
 export const registerAnnotationTools = (
   server: McpServer,
@@ -18,16 +18,14 @@ export const registerAnnotationTools = (
       limit: z.number().optional().describe("Maximum number of results (default: 100)"),
     },
     { title: "List Annotations", readOnlyHint: true, openWorldHint: true },
-    async ({ dashboardUid, limit }) => {
-      const result = await runtime.runPromiseExit(
+    ({ dashboardUid, limit }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.listAnnotations(dashboardUid, limit);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -49,15 +47,13 @@ export const registerAnnotationTools = (
       destructiveHint: false,
       openWorldHint: true,
     },
-    async ({ text, tags, dashboardUid, time, timeEnd }) => {
-      const result = await runtime.runPromiseExit(
+    ({ text, tags, dashboardUid, time, timeEnd }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.createAnnotation(text, tags, dashboardUid, time, timeEnd);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 };

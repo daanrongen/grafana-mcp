@@ -1,4 +1,4 @@
-import type { Cause } from "effect";
+import type { Cause, Effect, ManagedRuntime } from "effect";
 import { Cause as CauseModule } from "effect";
 
 export const formatSuccess = (data: unknown) => ({
@@ -19,3 +19,12 @@ export const formatError = (cause: Cause.Cause<unknown>) => ({
   ],
   isError: true as const,
 });
+
+export const runTool = async <R, E, A>(
+  runtime: ManagedRuntime.ManagedRuntime<R, E>,
+  effect: Effect.Effect<A, E, R>,
+) => {
+  const result = await runtime.runPromiseExit(effect);
+  if (result._tag === "Failure") return formatError(result.cause);
+  return formatSuccess(result.value);
+};

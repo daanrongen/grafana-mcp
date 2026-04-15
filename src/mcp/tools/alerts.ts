@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import type { GrafanaError, NotFoundError } from "../../domain/errors.ts";
 import { GrafanaClient } from "../../domain/GrafanaClient.ts";
-import { formatError, formatSuccess } from "../utils.ts";
+import { runTool } from "../utils.ts";
 
 export const registerAlertTools = (
   server: McpServer,
@@ -15,16 +15,14 @@ export const registerAlertTools = (
     "List all Grafana alert rules. Returns uid, title, condition, folder, rule group, and state settings.",
     {},
     { title: "List Alert Rules", readOnlyHint: true, openWorldHint: true },
-    async () => {
-      const result = await runtime.runPromiseExit(
+    () =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.listAlertRules();
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -34,16 +32,14 @@ export const registerAlertTools = (
       uid: z.string().describe("Alert rule UID"),
     },
     { title: "Get Alert Rule", readOnlyHint: true, openWorldHint: true },
-    async ({ uid }) => {
-      const result = await runtime.runPromiseExit(
+    ({ uid }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.getAlertRule(uid);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -51,15 +47,13 @@ export const registerAlertTools = (
     "List currently firing Grafana alert instances from Alertmanager. Returns labels, state, and activeAt.",
     {},
     { title: "List Alert Instances", readOnlyHint: true, openWorldHint: true },
-    async () => {
-      const result = await runtime.runPromiseExit(
+    () =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.listAlertInstances();
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 };
