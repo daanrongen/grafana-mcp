@@ -103,13 +103,31 @@ const HealthStatusSchema = Schema.Struct({
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Internal sentinel thrown inside fetch helpers when the server returns a
+ * non-OK status. Carrying the numeric status code lets `mapNotFound` check
+ * `status === 404` directly instead of sniffing the error message string.
+ */
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
 const wrapFetch = (
   label: string,
   fn: () => Promise<unknown>,
 ): Effect.Effect<unknown, GrafanaError> =>
   Effect.tryPromise({
     try: fn,
-    catch: (e) => new GrafanaError({ message: `${label} failed`, cause: e }),
+    catch: (e) =>
+      e instanceof HttpError
+        ? new GrafanaError({ message: `${label} failed: HTTP ${e.status} ${e.message}`, cause: e })
+        : new GrafanaError({ message: `${label} failed`, cause: e }),
   });
 
 /**
@@ -144,12 +162,9 @@ export const GrafanaClientLive = Layer.effect(
     const get = (path: string): Effect.Effect<unknown, GrafanaError> =>
       wrapFetch(`GET ${path}`, async () => {
         const res = await fetch(`${baseUrl}${path}`, { headers });
-        if (res.status === 404) {
-          throw new Error(`404 Not Found: ${path}`);
-        }
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`HTTP ${res.status}: ${text}`);
+          throw new HttpError(res.status, text);
         }
         return res.json();
       });
@@ -171,12 +186,9 @@ export const GrafanaClientLive = Layer.effect(
     const del = (path: string): Effect.Effect<void, GrafanaError> =>
       wrapFetch(`DELETE ${path}`, async () => {
         const res = await fetch(`${baseUrl}${path}`, { method: "DELETE", headers });
-        if (res.status === 404) {
-          throw new Error(`404 Not Found: ${path}`);
-        }
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(`HTTP ${res.status}: ${text}`);
+          throw new HttpError(res.status, text);
         }
       }) as Effect.Effect<void, GrafanaError>;
 
@@ -186,7 +198,7 @@ export const GrafanaClientLive = Layer.effect(
       effect: Effect.Effect<A, GrafanaError>,
     ): Effect.Effect<A, GrafanaError | NotFoundError> =>
       Effect.catchAll(effect, (e): Effect.Effect<never, GrafanaError | NotFoundError> => {
-        if (e.message.includes("404")) {
+        if (e.cause instanceof HttpError && e.cause.status === 404) {
           return Effect.fail(new NotFoundError({ resource, id }));
         }
         return Effect.fail(e);
