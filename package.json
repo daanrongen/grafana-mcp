@@ -3,7 +3,9 @@
   "version": "1.0.4",
   "description": "MCP server for Grafana — manage dashboards, datasources, alerts, folders, and annotations over stdio",
   "type": "module",
-  "bin": "./dist/main.js",
+  "bin": {
+    "grafana-mcp": "./dist/main.js"
+  },
   "main": "./dist/main.js",
   "files": [
     "dist"
