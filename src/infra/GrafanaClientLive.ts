@@ -1,4 +1,4 @@
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Layer, Redacted, Schema } from "effect";
 import { GrafanaConfig } from "../config.ts";
 import { GrafanaError, NotFoundError } from "../domain/errors.ts";
 import { GrafanaClient } from "../domain/GrafanaClient.ts";
@@ -13,11 +13,121 @@ import {
   HealthStatus,
 } from "../domain/models.ts";
 
-const wrapFetch = <A>(label: string, fn: () => Promise<A>): Effect.Effect<A, GrafanaError> =>
+// ---------------------------------------------------------------------------
+// Response schemas — these describe the raw JSON shapes returned by Grafana.
+// They are intentionally separate from the domain models so each layer owns
+// its own concerns (raw API shape vs. domain representation).
+// ---------------------------------------------------------------------------
+
+const SearchItemSchema = Schema.Struct({
+  uid: Schema.String,
+  title: Schema.String,
+  url: Schema.String,
+  folderTitle: Schema.optional(Schema.String),
+  tags: Schema.Array(Schema.String),
+});
+
+const DashboardEnvelopeSchema = Schema.Struct({
+  dashboard: Schema.Record({ key: Schema.String, value: Schema.Unknown }),
+  meta: Schema.Struct({
+    folderTitle: Schema.optional(Schema.String),
+    version: Schema.optional(Schema.Number),
+  }),
+});
+
+const CreateDashboardResponseSchema = Schema.Struct({
+  uid: Schema.String,
+  version: Schema.Number,
+  url: Schema.String,
+});
+
+const UpdateDashboardResponseSchema = Schema.Struct({
+  uid: Schema.String,
+});
+
+const DatasourceSchema = Schema.Struct({
+  id: Schema.Number,
+  uid: Schema.String,
+  name: Schema.String,
+  type: Schema.String,
+  url: Schema.String,
+  isDefault: Schema.Boolean,
+});
+
+const CreateDatasourceResponseSchema = Schema.Struct({
+  datasource: DatasourceSchema,
+});
+
+const AlertRuleSchema = Schema.Struct({
+  uid: Schema.String,
+  title: Schema.String,
+  condition: Schema.String,
+  folderUID: Schema.String,
+  ruleGroup: Schema.String,
+  noDataState: Schema.String,
+  execErrState: Schema.String,
+});
+
+const AlertInstanceSchema = Schema.Struct({
+  labels: Schema.Record({ key: Schema.String, value: Schema.String }),
+  status: Schema.Struct({ state: Schema.String }),
+  activeAt: Schema.optional(Schema.String),
+});
+
+const FolderSchema = Schema.Struct({
+  uid: Schema.String,
+  title: Schema.String,
+  url: Schema.String,
+});
+
+const AnnotationSchema = Schema.Struct({
+  id: Schema.Number,
+  dashboardUID: Schema.optional(Schema.String),
+  time: Schema.Number,
+  timeEnd: Schema.optional(Schema.Number),
+  text: Schema.String,
+  tags: Schema.Array(Schema.String),
+});
+
+const CreateAnnotationResponseSchema = Schema.Struct({
+  id: Schema.Number,
+});
+
+const HealthStatusSchema = Schema.Struct({
+  commit: Schema.String,
+  database: Schema.String,
+  version: Schema.String,
+});
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const wrapFetch = (
+  label: string,
+  fn: () => Promise<unknown>,
+): Effect.Effect<unknown, GrafanaError> =>
   Effect.tryPromise({
     try: fn,
     catch: (e) => new GrafanaError({ message: `${label} failed`, cause: e }),
   });
+
+/**
+ * Decode an unknown value against a schema, wrapping any parse failure as a
+ * GrafanaError so it stays in the typed error channel.
+ */
+const decode =
+  <A, I>(schema: Schema.Schema<A, I>) =>
+  (raw: unknown): Effect.Effect<A, GrafanaError> =>
+    Schema.decodeUnknown(schema)(raw).pipe(
+      Effect.mapError(
+        (e) =>
+          new GrafanaError({
+            message: `Response validation failed: ${e.message}`,
+            cause: e,
+          }),
+      ),
+    );
 
 export const GrafanaClientLive = Layer.effect(
   GrafanaClient,
@@ -31,7 +141,7 @@ export const GrafanaClientLive = Layer.effect(
       Authorization: `Bearer ${token}`,
     };
 
-    const get = <A>(path: string): Effect.Effect<A, GrafanaError> =>
+    const get = (path: string): Effect.Effect<unknown, GrafanaError> =>
       wrapFetch(`GET ${path}`, async () => {
         const res = await fetch(`${baseUrl}${path}`, { headers });
         if (res.status === 404) {
@@ -41,10 +151,10 @@ export const GrafanaClientLive = Layer.effect(
           const text = await res.text();
           throw new Error(`HTTP ${res.status}: ${text}`);
         }
-        return res.json() as Promise<A>;
+        return res.json();
       });
 
-    const post = <A>(path: string, body: unknown): Effect.Effect<A, GrafanaError> =>
+    const post = (path: string, body: unknown): Effect.Effect<unknown, GrafanaError> =>
       wrapFetch(`POST ${path}`, async () => {
         const res = await fetch(`${baseUrl}${path}`, {
           method: "POST",
@@ -55,7 +165,7 @@ export const GrafanaClientLive = Layer.effect(
           const text = await res.text();
           throw new Error(`HTTP ${res.status}: ${text}`);
         }
-        return res.json() as Promise<A>;
+        return res.json();
       });
 
     const del = (path: string): Effect.Effect<void, GrafanaError> =>
@@ -68,7 +178,7 @@ export const GrafanaClientLive = Layer.effect(
           const text = await res.text();
           throw new Error(`HTTP ${res.status}: ${text}`);
         }
-      });
+      }) as Effect.Effect<void, GrafanaError>;
 
     const mapNotFound = <A>(
       resource: string,
@@ -84,17 +194,10 @@ export const GrafanaClientLive = Layer.effect(
 
     return {
       listDashboards: (query, limit = 100) =>
-        get<
-          Array<{
-            uid: string;
-            title: string;
-            url: string;
-            folderTitle?: string;
-            tags: string[];
-          }>
-        >(
+        get(
           `/api/search?type=dash-db&limit=${limit}${query ? `&query=${encodeURIComponent(query)}` : ""}`,
         ).pipe(
+          Effect.flatMap(decode(Schema.Array(SearchItemSchema))),
           Effect.map((items) =>
             items.map(
               (d) =>
@@ -103,7 +206,7 @@ export const GrafanaClientLive = Layer.effect(
                   title: d.title,
                   url: d.url,
                   folderTitle: d.folderTitle,
-                  tags: d.tags ?? [],
+                  tags: [...(d.tags ?? [])],
                 }),
             ),
           ),
@@ -113,10 +216,8 @@ export const GrafanaClientLive = Layer.effect(
         mapNotFound(
           "dashboard",
           uid,
-          get<{
-            dashboard: Record<string, unknown>;
-            meta: { folderTitle?: string; version?: number };
-          }>(`/api/dashboards/uid/${uid}`).pipe(
+          get(`/api/dashboards/uid/${uid}`).pipe(
+            Effect.flatMap(decode(DashboardEnvelopeSchema)),
             Effect.map(
               ({ dashboard, meta }) =>
                 new DashboardDetail({
@@ -131,23 +232,23 @@ export const GrafanaClientLive = Layer.effect(
         ),
 
       createDashboard: (dashboardJson, folderUid, message) =>
-        post<{ uid: string; version: number; url: string }>("/api/dashboards/db", {
+        post("/api/dashboards/db", {
           dashboard: JSON.parse(dashboardJson),
           folderUid,
           message,
           overwrite: false,
         }).pipe(
+          Effect.flatMap(decode(CreateDashboardResponseSchema)),
           Effect.flatMap((res) =>
-            get<{ dashboard: Record<string, unknown>; meta: { version: number } }>(
-              `/api/dashboards/uid/${res.uid}`,
-            ).pipe(
+            get(`/api/dashboards/uid/${res.uid}`).pipe(
+              Effect.flatMap(decode(DashboardEnvelopeSchema)),
               Effect.map(
                 ({ dashboard, meta }) =>
                   new DashboardDetail({
                     uid: res.uid,
                     title: String(dashboard.title ?? ""),
                     json: JSON.stringify(dashboard),
-                    version: meta.version,
+                    version: meta.version ?? 0,
                   }),
               ),
             ),
@@ -158,28 +259,27 @@ export const GrafanaClientLive = Layer.effect(
         mapNotFound(
           "dashboard",
           uid,
-          get<{ dashboard: Record<string, unknown>; meta: { version: number } }>(
-            `/api/dashboards/uid/${uid}`,
-          ).pipe(
+          get(`/api/dashboards/uid/${uid}`).pipe(
+            Effect.flatMap(decode(DashboardEnvelopeSchema)),
             Effect.flatMap(({ dashboard: _dashboard, meta }) => {
               const updated = { ...JSON.parse(dashboardJson), uid, version: meta.version };
-              return post<{ uid: string }>("/api/dashboards/db", {
+              return post("/api/dashboards/db", {
                 dashboard: updated,
                 message,
                 overwrite: true,
               });
             }),
+            Effect.flatMap(decode(UpdateDashboardResponseSchema)),
             Effect.flatMap((res) =>
-              get<{ dashboard: Record<string, unknown>; meta: { version: number } }>(
-                `/api/dashboards/uid/${res.uid}`,
-              ).pipe(
+              get(`/api/dashboards/uid/${res.uid}`).pipe(
+                Effect.flatMap(decode(DashboardEnvelopeSchema)),
                 Effect.map(
                   ({ dashboard, meta }) =>
                     new DashboardDetail({
                       uid: res.uid,
                       title: String(dashboard.title ?? ""),
                       json: JSON.stringify(dashboard),
-                      version: meta.version,
+                      version: meta.version ?? 0,
                     }),
                 ),
               ),
@@ -190,16 +290,8 @@ export const GrafanaClientLive = Layer.effect(
       deleteDashboard: (uid) => mapNotFound("dashboard", uid, del(`/api/dashboards/uid/${uid}`)),
 
       listDatasources: () =>
-        get<
-          Array<{
-            id: number;
-            uid: string;
-            name: string;
-            type: string;
-            url: string;
-            isDefault: boolean;
-          }>
-        >("/api/datasources").pipe(
+        get("/api/datasources").pipe(
+          Effect.flatMap(decode(Schema.Array(DatasourceSchema))),
           Effect.map((items) =>
             items.map(
               (d) =>
@@ -219,14 +311,8 @@ export const GrafanaClientLive = Layer.effect(
         mapNotFound(
           "datasource",
           uid,
-          get<{
-            id: number;
-            uid: string;
-            name: string;
-            type: string;
-            url: string;
-            isDefault: boolean;
-          }>(`/api/datasources/uid/${uid}`).pipe(
+          get(`/api/datasources/uid/${uid}`).pipe(
+            Effect.flatMap(decode(DatasourceSchema)),
             Effect.map(
               (d) =>
                 new Datasource({
@@ -242,16 +328,8 @@ export const GrafanaClientLive = Layer.effect(
         ),
 
       createDatasource: (name, type, url, isDefault = false) =>
-        post<{
-          datasource: {
-            id: number;
-            uid: string;
-            name: string;
-            type: string;
-            url: string;
-            isDefault: boolean;
-          };
-        }>("/api/datasources", { name, type, url, access: "proxy", isDefault }).pipe(
+        post("/api/datasources", { name, type, url, access: "proxy", isDefault }).pipe(
+          Effect.flatMap(decode(CreateDatasourceResponseSchema)),
           Effect.map(
             ({ datasource: d }) =>
               new Datasource({
@@ -268,17 +346,8 @@ export const GrafanaClientLive = Layer.effect(
       deleteDatasource: (uid) => mapNotFound("datasource", uid, del(`/api/datasources/uid/${uid}`)),
 
       listAlertRules: () =>
-        get<
-          Array<{
-            uid: string;
-            title: string;
-            condition: string;
-            folderUID: string;
-            ruleGroup: string;
-            noDataState: string;
-            execErrState: string;
-          }>
-        >("/api/v1/provisioning/alert-rules").pipe(
+        get("/api/v1/provisioning/alert-rules").pipe(
+          Effect.flatMap(decode(Schema.Array(AlertRuleSchema))),
           Effect.map((items) =>
             items.map(
               (r) =>
@@ -299,15 +368,8 @@ export const GrafanaClientLive = Layer.effect(
         mapNotFound(
           "alert-rule",
           uid,
-          get<{
-            uid: string;
-            title: string;
-            condition: string;
-            folderUID: string;
-            ruleGroup: string;
-            noDataState: string;
-            execErrState: string;
-          }>(`/api/v1/provisioning/alert-rules/${uid}`).pipe(
+          get(`/api/v1/provisioning/alert-rules/${uid}`).pipe(
+            Effect.flatMap(decode(AlertRuleSchema)),
             Effect.map(
               (r) =>
                 new AlertRule({
@@ -324,13 +386,8 @@ export const GrafanaClientLive = Layer.effect(
         ),
 
       listAlertInstances: () =>
-        get<
-          Array<{
-            labels: Record<string, string>;
-            status: { state: string };
-            activeAt?: string;
-          }>
-        >("/api/alertmanager/grafana/api/v2/alerts").pipe(
+        get("/api/alertmanager/grafana/api/v2/alerts").pipe(
+          Effect.flatMap(decode(Schema.Array(AlertInstanceSchema))),
           Effect.map((items) =>
             items.map(
               (a) =>
@@ -344,33 +401,29 @@ export const GrafanaClientLive = Layer.effect(
         ),
 
       listFolders: () =>
-        get<Array<{ uid: string; title: string; url: string }>>("/api/folders").pipe(
+        get("/api/folders").pipe(
+          Effect.flatMap(decode(Schema.Array(FolderSchema))),
           Effect.map((items) =>
             items.map((f) => new Folder({ uid: f.uid, title: f.title, url: f.url })),
           ),
         ),
 
       createFolder: (title, uid) =>
-        post<{ uid: string; title: string; url: string }>("/api/folders", {
+        post("/api/folders", {
           title,
           ...(uid !== undefined ? { uid } : {}),
-        }).pipe(Effect.map((f) => new Folder({ uid: f.uid, title: f.title, url: f.url }))),
+        }).pipe(
+          Effect.flatMap(decode(FolderSchema)),
+          Effect.map((f) => new Folder({ uid: f.uid, title: f.title, url: f.url })),
+        ),
 
       deleteFolder: (uid) => mapNotFound("folder", uid, del(`/api/folders/${uid}`)),
 
       listAnnotations: (dashboardUID, limit = 100) => {
         const params = new URLSearchParams({ limit: String(limit) });
         if (dashboardUID !== undefined) params.set("dashboardUID", dashboardUID);
-        return get<
-          Array<{
-            id: number;
-            dashboardUID?: string;
-            time: number;
-            timeEnd?: number;
-            text: string;
-            tags: string[];
-          }>
-        >(`/api/annotations?${params.toString()}`).pipe(
+        return get(`/api/annotations?${params.toString()}`).pipe(
+          Effect.flatMap(decode(Schema.Array(AnnotationSchema))),
           Effect.map((items) =>
             items.map(
               (a) =>
@@ -380,7 +433,7 @@ export const GrafanaClientLive = Layer.effect(
                   time: a.time,
                   timeEnd: a.timeEnd,
                   text: a.text,
-                  tags: a.tags ?? [],
+                  tags: [...(a.tags ?? [])],
                 }),
             ),
           ),
@@ -388,13 +441,14 @@ export const GrafanaClientLive = Layer.effect(
       },
 
       createAnnotation: (text, tags, dashboardUID, time, timeEnd) =>
-        post<{ id: number }>("/api/annotations", {
+        post("/api/annotations", {
           text,
           tags,
           ...(dashboardUID !== undefined ? { dashboardUID } : {}),
           ...(time !== undefined ? { time } : {}),
           ...(timeEnd !== undefined ? { timeEnd } : {}),
         }).pipe(
+          Effect.flatMap(decode(CreateAnnotationResponseSchema)),
           Effect.map(
             ({ id }) =>
               new Annotation({
@@ -409,7 +463,8 @@ export const GrafanaClientLive = Layer.effect(
         ),
 
       healthCheck: () =>
-        get<{ commit: string; database: string; version: string }>("/api/health").pipe(
+        get("/api/health").pipe(
+          Effect.flatMap(decode(HealthStatusSchema)),
           Effect.map(
             (h) =>
               new HealthStatus({
