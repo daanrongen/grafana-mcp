@@ -1,6 +1,6 @@
 {
   "name": "@daanrongen/grafana-mcp",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "MCP server for Grafana — manage dashboards, datasources, alerts, folders, and annotations over stdio",
   "type": "module",
   "bin": "./dist/main.js",
