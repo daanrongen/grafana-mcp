@@ -204,44 +204,71 @@ export const GrafanaClientLive = Layer.effect(
         return Effect.fail(e);
       });
 
+    // -----------------------------------------------------------------------
+    // Shared helpers (closed over `get` and `decode`)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Fetch a dashboard by uid and map the envelope into a DashboardDetail.
+     * The `uid` parameter is used as a fallback when the dashboard JSON itself
+     * does not carry a uid field.
+     */
+    const fetchDashboardDetail = (uid: string): Effect.Effect<DashboardDetail, GrafanaError> =>
+      get(`/api/dashboards/uid/${uid}`).pipe(
+        Effect.flatMap(decode(DashboardEnvelopeSchema)),
+        Effect.map(
+          ({ dashboard, meta }) =>
+            new DashboardDetail({
+              uid: String(dashboard.uid ?? uid),
+              title: String(dashboard.title ?? ""),
+              json: JSON.stringify(dashboard),
+              version: meta.version ?? 0,
+              folderTitle: meta.folderTitle,
+            }),
+        ),
+      );
+
+    /**
+     * Fetch only the `meta.version` field for a dashboard. Used by
+     * `updateDashboard` to avoid fetching the full dashboard payload when only
+     * the version number is needed.
+     */
+    const fetchDashboardVersion = (uid: string): Effect.Effect<number, GrafanaError> =>
+      get(`/api/dashboards/uid/${uid}`).pipe(
+        Effect.flatMap(decode(DashboardEnvelopeSchema)),
+        Effect.map(({ meta }) => meta.version ?? 0),
+      );
+
+    /**
+     * Generic list helper: GET `path`, decode with `Schema.Array(itemSchema)`,
+     * then map each item to a domain model via `mapper`.
+     */
+    const listAndMap = <Raw, Domain>(
+      path: string,
+      itemSchema: Schema.Schema<Raw>,
+      mapper: (item: Raw) => Domain,
+    ): Effect.Effect<Domain[], GrafanaError> =>
+      get(path).pipe(
+        Effect.flatMap(decode(Schema.Array(itemSchema))),
+        Effect.map((items) => items.map(mapper)),
+      );
+
     return {
       listDashboards: (query, limit = 100) =>
-        get(
+        listAndMap(
           `/api/search?type=dash-db&limit=${limit}${query ? `&query=${encodeURIComponent(query)}` : ""}`,
-        ).pipe(
-          Effect.flatMap(decode(Schema.Array(SearchItemSchema))),
-          Effect.map((items) =>
-            items.map(
-              (d) =>
-                new Dashboard({
-                  uid: d.uid,
-                  title: d.title,
-                  url: d.url,
-                  folderTitle: d.folderTitle,
-                  tags: [...(d.tags ?? [])],
-                }),
-            ),
-          ),
+          SearchItemSchema,
+          (d) =>
+            new Dashboard({
+              uid: d.uid,
+              title: d.title,
+              url: d.url,
+              folderTitle: d.folderTitle,
+              tags: [...(d.tags ?? [])],
+            }),
         ),
 
-      getDashboard: (uid) =>
-        mapNotFound(
-          "dashboard",
-          uid,
-          get(`/api/dashboards/uid/${uid}`).pipe(
-            Effect.flatMap(decode(DashboardEnvelopeSchema)),
-            Effect.map(
-              ({ dashboard, meta }) =>
-                new DashboardDetail({
-                  uid: String(dashboard.uid ?? uid),
-                  title: String(dashboard.title ?? ""),
-                  json: JSON.stringify(dashboard),
-                  version: meta.version ?? 0,
-                  folderTitle: meta.folderTitle,
-                }),
-            ),
-          ),
-        ),
+      getDashboard: (uid) => mapNotFound("dashboard", uid, fetchDashboardDetail(uid)),
 
       createDashboard: (dashboardJson, folderUid, message) =>
         post("/api/dashboards/db", {
@@ -251,30 +278,16 @@ export const GrafanaClientLive = Layer.effect(
           overwrite: false,
         }).pipe(
           Effect.flatMap(decode(CreateDashboardResponseSchema)),
-          Effect.flatMap((res) =>
-            get(`/api/dashboards/uid/${res.uid}`).pipe(
-              Effect.flatMap(decode(DashboardEnvelopeSchema)),
-              Effect.map(
-                ({ dashboard, meta }) =>
-                  new DashboardDetail({
-                    uid: res.uid,
-                    title: String(dashboard.title ?? ""),
-                    json: JSON.stringify(dashboard),
-                    version: meta.version ?? 0,
-                  }),
-              ),
-            ),
-          ),
+          Effect.flatMap((res) => fetchDashboardDetail(res.uid)),
         ),
 
       updateDashboard: (uid, dashboardJson, message) =>
         mapNotFound(
           "dashboard",
           uid,
-          get(`/api/dashboards/uid/${uid}`).pipe(
-            Effect.flatMap(decode(DashboardEnvelopeSchema)),
-            Effect.flatMap(({ dashboard: _dashboard, meta }) => {
-              const updated = { ...JSON.parse(dashboardJson), uid, version: meta.version };
+          fetchDashboardVersion(uid).pipe(
+            Effect.flatMap((version) => {
+              const updated = { ...JSON.parse(dashboardJson), uid, version };
               return post("/api/dashboards/db", {
                 dashboard: updated,
                 message,
@@ -282,41 +295,25 @@ export const GrafanaClientLive = Layer.effect(
               });
             }),
             Effect.flatMap(decode(UpdateDashboardResponseSchema)),
-            Effect.flatMap((res) =>
-              get(`/api/dashboards/uid/${res.uid}`).pipe(
-                Effect.flatMap(decode(DashboardEnvelopeSchema)),
-                Effect.map(
-                  ({ dashboard, meta }) =>
-                    new DashboardDetail({
-                      uid: res.uid,
-                      title: String(dashboard.title ?? ""),
-                      json: JSON.stringify(dashboard),
-                      version: meta.version ?? 0,
-                    }),
-                ),
-              ),
-            ),
+            Effect.flatMap((res) => fetchDashboardDetail(res.uid)),
           ),
         ),
 
       deleteDashboard: (uid) => mapNotFound("dashboard", uid, del(`/api/dashboards/uid/${uid}`)),
 
       listDatasources: () =>
-        get("/api/datasources").pipe(
-          Effect.flatMap(decode(Schema.Array(DatasourceSchema))),
-          Effect.map((items) =>
-            items.map(
-              (d) =>
-                new Datasource({
-                  id: d.id,
-                  uid: d.uid,
-                  name: d.name,
-                  type: d.type,
-                  url: d.url ?? "",
-                  isDefault: d.isDefault ?? false,
-                }),
-            ),
-          ),
+        listAndMap(
+          "/api/datasources",
+          DatasourceSchema,
+          (d) =>
+            new Datasource({
+              id: d.id,
+              uid: d.uid,
+              name: d.name,
+              type: d.type,
+              url: d.url ?? "",
+              isDefault: d.isDefault ?? false,
+            }),
         ),
 
       getDatasource: (uid) =>
@@ -358,22 +355,19 @@ export const GrafanaClientLive = Layer.effect(
       deleteDatasource: (uid) => mapNotFound("datasource", uid, del(`/api/datasources/uid/${uid}`)),
 
       listAlertRules: () =>
-        get("/api/v1/provisioning/alert-rules").pipe(
-          Effect.flatMap(decode(Schema.Array(AlertRuleSchema))),
-          Effect.map((items) =>
-            items.map(
-              (r) =>
-                new AlertRule({
-                  uid: r.uid,
-                  title: r.title,
-                  condition: r.condition,
-                  folderUID: r.folderUID,
-                  ruleGroup: r.ruleGroup,
-                  noDataState: r.noDataState,
-                  execErrState: r.execErrState,
-                }),
-            ),
-          ),
+        listAndMap(
+          "/api/v1/provisioning/alert-rules",
+          AlertRuleSchema,
+          (r) =>
+            new AlertRule({
+              uid: r.uid,
+              title: r.title,
+              condition: r.condition,
+              folderUID: r.folderUID,
+              ruleGroup: r.ruleGroup,
+              noDataState: r.noDataState,
+              execErrState: r.execErrState,
+            }),
         ),
 
       getAlertRule: (uid) =>
@@ -413,11 +407,10 @@ export const GrafanaClientLive = Layer.effect(
         ),
 
       listFolders: () =>
-        get("/api/folders").pipe(
-          Effect.flatMap(decode(Schema.Array(FolderSchema))),
-          Effect.map((items) =>
-            items.map((f) => new Folder({ uid: f.uid, title: f.title, url: f.url })),
-          ),
+        listAndMap(
+          "/api/folders",
+          FolderSchema,
+          (f) => new Folder({ uid: f.uid, title: f.title, url: f.url }),
         ),
 
       createFolder: (title, uid) =>
