@@ -20,6 +20,7 @@ export const GrafanaClientTest = Layer.effect(
     const foldersRef = yield* Ref.make<Map<string, Folder>>(new Map());
     const annotationsRef = yield* Ref.make<Map<number, Annotation>>(new Map());
     let nextAnnotationId = 1;
+    let nextDatasourceId = 1;
 
     const requireDashboard = (uid: string) =>
       Effect.gen(function* () {
@@ -54,10 +55,10 @@ export const GrafanaClientTest = Layer.effect(
       });
 
     return GrafanaClient.of({
-      listDashboards: (_query, _limit) =>
+      listDashboards: (query, limit) =>
         Ref.get(dashboardsRef).pipe(
-          Effect.map((m) =>
-            [...m.values()].map(
+          Effect.map((m) => {
+            let results = [...m.values()].map(
               (d) =>
                 new Dashboard({
                   uid: d.uid,
@@ -65,8 +66,16 @@ export const GrafanaClientTest = Layer.effect(
                   url: `/d/${d.uid}`,
                   tags: [],
                 }),
-            ),
-          ),
+            );
+            if (query) {
+              const q = query.toLowerCase();
+              results = results.filter((d) => d.title.toLowerCase().includes(q));
+            }
+            if (limit !== undefined) {
+              results = results.slice(0, limit);
+            }
+            return results;
+          }),
         ),
 
       getDashboard: requireDashboard,
@@ -119,7 +128,7 @@ export const GrafanaClientTest = Layer.effect(
       createDatasource: (name, type, url, isDefault = false) =>
         Effect.gen(function* () {
           const uid = `ds-${Date.now()}`;
-          const ds = new Datasource({ id: nextAnnotationId++, uid, name, type, url, isDefault });
+          const ds = new Datasource({ id: nextDatasourceId++, uid, name, type, url, isDefault });
           yield* Ref.update(datasourcesRef, (m) => new Map(m).set(uid, ds));
           return ds;
         }),
@@ -160,8 +169,19 @@ export const GrafanaClientTest = Layer.effect(
           });
         }),
 
-      listAnnotations: (_dashboardUID, _limit) =>
-        Ref.get(annotationsRef).pipe(Effect.map((m) => [...m.values()])),
+      listAnnotations: (dashboardUID, limit) =>
+        Ref.get(annotationsRef).pipe(
+          Effect.map((m) => {
+            let results = [...m.values()];
+            if (dashboardUID) {
+              results = results.filter((a) => a.dashboardUID === dashboardUID);
+            }
+            if (limit !== undefined) {
+              results = results.slice(0, limit);
+            }
+            return results;
+          }),
+        ),
 
       createAnnotation: (text, tags, dashboardUID, time, timeEnd) =>
         Effect.gen(function* () {
