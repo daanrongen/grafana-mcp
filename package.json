@@ -3,15 +3,12 @@
   "version": "1.0.2",
   "description": "MCP server for Grafana — manage dashboards, datasources, alerts, folders, and annotations over stdio",
   "type": "module",
-  "bin": {
-    "grafana-mcp": "dist/main.js"
-  },
+  "bin": "./dist/main.js",
   "main": "./dist/main.js",
   "files": [
     "dist"
   ],
   "scripts": {
-    "start": "bun run src/main.ts",
     "dev": "bun --watch src/main.ts",
     "inspect": "DANGEROUSLY_OMIT_AUTH=true mcp-inspector bun dist/main.js",
     "build": "bun build src/main.ts --outfile dist/main.js --target bun",
@@ -25,6 +22,9 @@
     "postversion": "git push --follow-tags"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/daanrongen/grafana-mcp.git"
@@ -40,14 +40,14 @@
     "bun": ">=1.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.10.2",
-    "effect": "^3.13.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "effect": "^3.21.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.8",
+    "@biomejs/biome": "^2.4.12",
     "bun-types": "latest",
-    "lefthook": "^2.1.4",
+    "lefthook": "^2.1.5",
     "typescript": "^5.8.3"
   }
 }

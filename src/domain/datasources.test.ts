@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Effect } from "effect";
-import { GrafanaClient } from "../../src/domain/GrafanaClient.ts";
-import { GrafanaClientTest } from "../../src/infra/GrafanaClientTest.ts";
+import { GrafanaClientTest } from "../infra/GrafanaClientTest.ts";
+import { GrafanaClient } from "./GrafanaClient.ts";
 
 describe("datasources", () => {
   it("listDatasources returns empty list initially", async () => {
