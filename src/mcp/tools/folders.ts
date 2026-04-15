@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import type { GrafanaError, NotFoundError } from "../../domain/errors.ts";
 import { GrafanaClient } from "../../domain/GrafanaClient.ts";
-import { formatError, formatSuccess } from "../utils.ts";
+import { runTool } from "../utils.ts";
 
 export const registerFolderTools = (
   server: McpServer,
@@ -15,16 +15,14 @@ export const registerFolderTools = (
     "List all Grafana folders. Returns uid, title, and url.",
     {},
     { title: "List Folders", readOnlyHint: true, openWorldHint: true },
-    async () => {
-      const result = await runtime.runPromiseExit(
+    () =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.listFolders();
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -35,16 +33,14 @@ export const registerFolderTools = (
       uid: z.string().optional().describe("Optional custom UID for the folder"),
     },
     { title: "Create Folder", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-    async ({ title, uid }) => {
-      const result = await runtime.runPromiseExit(
+    ({ title, uid }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.createFolder(title, uid);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -54,15 +50,14 @@ export const registerFolderTools = (
       uid: z.string().describe("Folder UID"),
     },
     { title: "Delete Folder", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    async ({ uid }) => {
-      const result = await runtime.runPromiseExit(
+    ({ uid }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           yield* client.deleteFolder(uid);
+          return { ok: true };
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess({ ok: true });
-    },
+      ),
   );
 };

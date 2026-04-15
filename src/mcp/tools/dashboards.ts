@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import type { GrafanaError, NotFoundError } from "../../domain/errors.ts";
 import { GrafanaClient } from "../../domain/GrafanaClient.ts";
-import { formatError, formatSuccess } from "../utils.ts";
+import { runTool } from "../utils.ts";
 
 export const registerDashboardTools = (
   server: McpServer,
@@ -18,16 +18,14 @@ export const registerDashboardTools = (
       limit: z.number().optional().describe("Maximum number of results (default: 100)"),
     },
     { title: "List Dashboards", readOnlyHint: true, openWorldHint: true },
-    async ({ query, limit }) => {
-      const result = await runtime.runPromiseExit(
+    ({ query, limit }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.listDashboards(query, limit);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -37,16 +35,14 @@ export const registerDashboardTools = (
       uid: z.string().describe("Dashboard UID"),
     },
     { title: "Get Dashboard", readOnlyHint: true, openWorldHint: true },
-    async ({ uid }) => {
-      const result = await runtime.runPromiseExit(
+    ({ uid }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.getDashboard(uid);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -60,16 +56,14 @@ export const registerDashboardTools = (
       message: z.string().optional().describe("Commit message for the dashboard version"),
     },
     { title: "Create Dashboard", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-    async ({ dashboardJson, folderUid, message }) => {
-      const result = await runtime.runPromiseExit(
+    ({ dashboardJson, folderUid, message }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.createDashboard(dashboardJson, folderUid, message);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -81,16 +75,14 @@ export const registerDashboardTools = (
       message: z.string().optional().describe("Commit message for the new version"),
     },
     { title: "Update Dashboard", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-    async ({ uid, dashboardJson, message }) => {
-      const result = await runtime.runPromiseExit(
+    ({ uid, dashboardJson, message }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           return yield* client.updateDashboard(uid, dashboardJson, message);
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess(result.value);
-    },
+      ),
   );
 
   server.tool(
@@ -100,15 +92,14 @@ export const registerDashboardTools = (
       uid: z.string().describe("Dashboard UID"),
     },
     { title: "Delete Dashboard", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    async ({ uid }) => {
-      const result = await runtime.runPromiseExit(
+    ({ uid }) =>
+      runTool(
+        runtime,
         Effect.gen(function* () {
           const client = yield* GrafanaClient;
           yield* client.deleteDashboard(uid);
+          return { ok: true };
         }),
-      );
-      if (result._tag === "Failure") return formatError(result.cause);
-      return formatSuccess({ ok: true });
-    },
+      ),
   );
 };
