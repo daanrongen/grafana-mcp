@@ -17,7 +17,13 @@ export const registerDashboardTools = (
       query: z.string().optional().describe("Search query to filter dashboards by title"),
       limit: z.number().optional().describe("Maximum number of results (default: 100)"),
     },
-    { title: "List Dashboards", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "List Dashboards",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     ({ query, limit }) =>
       runTool(
         runtime,
@@ -34,7 +40,13 @@ export const registerDashboardTools = (
     {
       uid: z.string().describe("Dashboard UID"),
     },
-    { title: "Get Dashboard", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "Get Dashboard",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     ({ uid }) =>
       runTool(
         runtime,
@@ -55,7 +67,13 @@ export const registerDashboardTools = (
       folderUid: z.string().optional().describe("UID of the folder to place the dashboard in"),
       message: z.string().optional().describe("Commit message for the dashboard version"),
     },
-    { title: "Create Dashboard", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    {
+      title: "Create Dashboard",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     ({ dashboardJson, folderUid, message }) =>
       runTool(
         runtime,
@@ -74,7 +92,13 @@ export const registerDashboardTools = (
       dashboardJson: z.string().describe("Updated dashboard JSON as a string"),
       message: z.string().optional().describe("Commit message for the new version"),
     },
-    { title: "Update Dashboard", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    {
+      title: "Update Dashboard",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     ({ uid, dashboardJson, message }) =>
       runTool(
         runtime,
@@ -91,7 +115,13 @@ export const registerDashboardTools = (
     {
       uid: z.string().describe("Dashboard UID"),
     },
-    { title: "Delete Dashboard", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    {
+      title: "Delete Dashboard",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     ({ uid }) =>
       runTool(
         runtime,

@@ -17,7 +17,13 @@ export const registerAnnotationTools = (
       dashboardUid: z.string().optional().describe("Filter annotations by dashboard UID"),
       limit: z.number().optional().describe("Maximum number of results (default: 100)"),
     },
-    { title: "List Annotations", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "List Annotations",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     ({ dashboardUid, limit }) =>
       runTool(
         runtime,
@@ -45,6 +51,7 @@ export const registerAnnotationTools = (
       title: "Create Annotation",
       readOnlyHint: false,
       destructiveHint: false,
+      idempotentHint: false,
       openWorldHint: true,
     },
     ({ text, tags, dashboardUid, time, timeEnd }) =>

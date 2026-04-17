@@ -14,7 +14,13 @@ export const registerDatasourceTools = (
     "list_datasources",
     "List all configured Grafana datasources. Returns id, uid, name, type, url, and isDefault.",
     {},
-    { title: "List Datasources", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "List Datasources",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     () =>
       runTool(
         runtime,
@@ -31,7 +37,13 @@ export const registerDatasourceTools = (
     {
       uid: z.string().describe("Datasource UID"),
     },
-    { title: "Get Datasource", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "Get Datasource",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     ({ uid }) =>
       runTool(
         runtime,
@@ -55,6 +67,7 @@ export const registerDatasourceTools = (
       title: "Create Datasource",
       readOnlyHint: false,
       destructiveHint: false,
+      idempotentHint: false,
       openWorldHint: true,
     },
     ({ name, type, url, isDefault }) =>
@@ -73,7 +86,13 @@ export const registerDatasourceTools = (
     {
       uid: z.string().describe("Datasource UID"),
     },
-    { title: "Delete Datasource", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    {
+      title: "Delete Datasource",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     ({ uid }) =>
       runTool(
         runtime,

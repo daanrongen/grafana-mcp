@@ -14,7 +14,13 @@ export const registerFolderTools = (
     "list_folders",
     "List all Grafana folders. Returns uid, title, and url.",
     {},
-    { title: "List Folders", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "List Folders",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     () =>
       runTool(
         runtime,
@@ -32,7 +38,13 @@ export const registerFolderTools = (
       title: z.string().describe("Folder title"),
       uid: z.string().optional().describe("Optional custom UID for the folder"),
     },
-    { title: "Create Folder", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    {
+      title: "Create Folder",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     ({ title, uid }) =>
       runTool(
         runtime,
@@ -49,7 +61,13 @@ export const registerFolderTools = (
     {
       uid: z.string().describe("Folder UID"),
     },
-    { title: "Delete Folder", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    {
+      title: "Delete Folder",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     ({ uid }) =>
       runTool(
         runtime,
