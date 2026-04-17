@@ -14,7 +14,13 @@ export const registerAlertTools = (
     "list_alert_rules",
     "List all Grafana alert rules. Returns uid, title, condition, folder, rule group, and state settings.",
     {},
-    { title: "List Alert Rules", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "List Alert Rules",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     () =>
       runTool(
         runtime,
@@ -31,7 +37,13 @@ export const registerAlertTools = (
     {
       uid: z.string().describe("Alert rule UID"),
     },
-    { title: "Get Alert Rule", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "Get Alert Rule",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     ({ uid }) =>
       runTool(
         runtime,
@@ -46,7 +58,13 @@ export const registerAlertTools = (
     "list_alert_instances",
     "List currently firing Grafana alert instances from Alertmanager. Returns labels, state, and activeAt.",
     {},
-    { title: "List Alert Instances", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "List Alert Instances",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     () =>
       runTool(
         runtime,

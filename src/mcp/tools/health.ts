@@ -13,7 +13,13 @@ export const registerHealthTools = (
     "health_check",
     "Check the health of the Grafana instance. Returns version, database status, and commit hash.",
     {},
-    { title: "Health Check", readOnlyHint: true, openWorldHint: true },
+    {
+      title: "Health Check",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     () =>
       runTool(
         runtime,
