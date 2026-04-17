@@ -77,7 +77,7 @@ const AlertInstanceSchema = Schema.Struct({
 const FolderSchema = Schema.Struct({
   uid: Schema.String,
   title: Schema.String,
-  url: Schema.String,
+  url: Schema.optional(Schema.String),
 });
 
 const AnnotationSchema = Schema.Struct({

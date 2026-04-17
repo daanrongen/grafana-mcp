@@ -45,7 +45,7 @@ export class AlertInstance extends Schema.Class<AlertInstance>("AlertInstance")(
 export class Folder extends Schema.Class<Folder>("Folder")({
   uid: Schema.String,
   title: Schema.String,
-  url: Schema.String,
+  url: Schema.optional(Schema.String),
 }) {}
 
 export class Annotation extends Schema.Class<Annotation>("Annotation")({
