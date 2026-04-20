@@ -39,7 +39,9 @@ export const registerAnnotationTools = (
     "Create a Grafana annotation, optionally pinned to a dashboard.",
     {
       text: z.string().describe("Annotation text / description"),
-      tags: z.array(z.string()).describe("Tags to attach to the annotation"),
+      tags: z
+        .union([z.array(z.string()), z.string().transform((s) => JSON.parse(s) as string[])])
+        .describe("Tags to attach to the annotation"),
       dashboardUid: z.string().optional().describe("Dashboard UID to attach the annotation to"),
       time: z.number().optional().describe("Epoch time in milliseconds (default: now)"),
       timeEnd: z
